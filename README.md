@@ -77,6 +77,12 @@ area.
 See [`docs/LEVIA_H7_BMI270_BUILD_GUIDE.md`](docs/LEVIA_H7_BMI270_BUILD_GUIDE.md)
 for the full procedure.
 
+Additional references:
+
+- [Flashing guide](docs/FLASHING_GUIDE.md)
+- [Connector pinout](docs/CONNECTOR_PINOUT.md)
+- [Validated hardware](docs/VALIDATED_HARDWARE.md)
+
 ## Upstream relationship and licensing
 
 The files under `ardupilot/` are intended to be copied into a compatible
