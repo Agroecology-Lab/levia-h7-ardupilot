@@ -13,6 +13,7 @@ repository intentionally does not duplicate the full ArduPilot source tree.
 - `ardupilot/examples/`: standalone hardware diagnostics.
 - `ardupilot/tools/`: host-side diagnostic scripts.
 - `bootloader/`: validated LEVIA bootloader images.
+- `firmware/`: versioned, known-good USB-update and full ST-Link images.
 - `docs/`: build, hardware-rework, calibration, and validation notes.
 - `experiments/hxy42688/`: archived experimental support for the undocumented
   HXY IMU; not used by the current BMI270 flight firmware.
