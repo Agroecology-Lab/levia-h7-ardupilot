@@ -1,0 +1,12 @@
+--- a/libraries/AP_InertialSensor/AP_InertialSensor.cpp
++++ b/libraries/AP_InertialSensor/AP_InertialSensor.cpp
+@@
+ #include "AP_InertialSensor_Invensensev3.h"
++#include "AP_InertialSensor_HXY42688.h"
+ #include "AP_InertialSensor_NONE.h"
+--- a/libraries/AP_InertialSensor/AP_InertialSensor_Backend.h
++++ b/libraries/AP_InertialSensor/AP_InertialSensor_Backend.h
+@@
+         DEVTYPE_INS_LSM6DSK320X = 0x43,
++        DEVTYPE_INS_HXY42688 = 0x44,
+     };
