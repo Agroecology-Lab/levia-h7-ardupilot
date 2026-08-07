@@ -48,6 +48,32 @@ The resulting firmware is:
 /path/to/ardupilot/build/LEVIA_H7/bin/arducopter.apj
 ```
 
+## First setup in QGroundControl
+
+**Remove all propellers before configuration or motor testing.** Do not fly
+immediately after flashing.
+
+1. Connect the board, open **Vehicle Setup > Parameters**, and set
+   `AHRS_ORIENTATION` to `Yaw270`. Save and reboot.
+2. Run the full **Accelerometer** calibration, then **Level Horizon**, with the
+   board installed in its final position.
+3. Calibrate the **Compass** outdoors and away from motors, speakers, steel
+   benches, power supplies, and high-current cables. Reboot afterward.
+4. Bind the ELRS receiver and run **Radio** calibration. For the validated
+   radio layout, channel 6 is Arm/Disarm and channel 7 selects flight modes.
+5. Set `MOT_PWM_TYPE` to the protocol supported by the ESC (the tested ESC used
+   `DShot300`). With no propellers fitted, verify every motor number and
+   direction individually.
+6. Configure the battery capacity and failsafe values. Compare QGroundControl
+   voltage and current against trusted meter readings before relying on them.
+7. Confirm GPS lock, SD-card logging, both IMUs, barometer, compass, RC link,
+   and all pre-arm checks. Resolve every unexplained warning before flight.
+
+Calibration values, compass offsets, radio endpoints, battery corrections,
+and vehicle tuning are specific to each aircraft. Do not copy them from
+another LEVIA unit. Start flight testing with a cautious low hover in a clear
+area.
+
 See [`docs/LEVIA_H7_BMI270_BUILD_GUIDE.md`](docs/LEVIA_H7_BMI270_BUILD_GUIDE.md)
 for the full procedure.
 
