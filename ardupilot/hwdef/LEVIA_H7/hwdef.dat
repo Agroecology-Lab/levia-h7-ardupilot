@@ -127,6 +127,14 @@ COMPASS IST8310 I2C:0:0x0E false ROTATION_ROLL_180
 define HAL_I2C_INTERNAL_MASK 1
 define AP_COMPASS_PROBING_ENABLED 1
 
+# CAN1 (U13) through the U12 transceiver (1051-class). Pins from the
+# LEVIA-H7 schematic/PCB: PD0 -> CAN1.RX, PD1 -> CAN1.TX, PD3 -> CAN1.SILENT
+# (transceiver pin 8, S). Drive S low for normal mode. Close JP1 to add the
+# onboard 120R termination.
+PD0 CAN1_RX CAN1
+PD1 CAN1_TX CAN1
+PD3 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
+
 # Switched 9V VTX rail. Relay 1 keeps it off by default and allows controlled
 # enable only after an antenna is fitted to the transmitter.
 PE5 VTX_9V_EN OUTPUT LOW GPIO(81)
