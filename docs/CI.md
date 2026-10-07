@@ -26,7 +26,9 @@ not publish releases.
 
 ## What CI does not prove
 
+
 Nothing here runs the firmware. There is no SITL test and no hardware test.
+
 
 ## Suggested branch protection
 
