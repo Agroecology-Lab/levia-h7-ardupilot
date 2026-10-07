@@ -7,8 +7,10 @@ if [ "$#" -ne 1 ]; then
 fi
 
 ARDUPILOT_DIR=$1
-cd "$ARDUPILOT_DIR"
+REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+sh "$REPO_DIR/scripts/ensure-bootloader.sh" "$ARDUPILOT_DIR"
 
+cd "$ARDUPILOT_DIR"
 ./waf configure --board LEVIA_H7
 ./waf build --targets examples/LEVIA_bmi270_whoami,examples/LEVIA_motor_pattern
 

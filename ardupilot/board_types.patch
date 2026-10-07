@@ -1,9 +1,0 @@
---- a/Tools/AP_Bootloader/board_types.txt
-+++ b/Tools/AP_Bootloader/board_types.txt
-@@
- AP_HW_MUPilot                        1222
- AP_HW_HWH7                           1223
-
-+AP_HW_LEVIA_H7                       1224
-
- AP_HW_ATLAS_CONTROL                  1227

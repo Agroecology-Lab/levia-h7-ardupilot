@@ -151,3 +151,6 @@ define HAL_STORAGE_SIZE 32768
 STORAGE_FLASH_PAGE 14
 
 env BUILD_ABIN True
+
+# Hiwonder I2C encoder motor driver (needs ardupilot/patches applied)
+define AP_HIWONDEREMM_ENABLED 1

@@ -1,0 +1,5 @@
+# LEVIA_H7 board defaults (applied by ArduPilot at first boot)
+
+# CAN1 is wired to a transceiver on this board, enable DroneCAN on it
+CAN_P1_DRIVER 1
+CAN_D1_PROTOCOL 1

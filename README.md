@@ -29,8 +29,9 @@ Bench validated:
 - SD card, eight PWM/DShot outputs, ELRS, GPS, battery sensing, analog OSD,
   camera input, and switched VTX supply
 
-This is not flight qualification. The private build uses provisional LEVIA
-board ID `1224`; reserve it with ArduPilot before distributing firmware. Also
+This is not flight qualification. The private build uses a provisional LEVIA
+board ID (see `ardupilot/BOARD_ID`); reserve one with ArduPilot before
+distributing firmware. Also
 complete the safety checks described in the guide.
 
 ## Quick start
@@ -39,8 +40,13 @@ Clone ArduPilot separately, including its submodules, then run:
 
 ```sh
 ./scripts/install-into-ardupilot.sh /path/to/ardupilot
-./scripts/build-copter.sh /path/to/ardupilot
+./scripts/build-copter.sh /path/to/ardupilot   # or build-rover.sh
 ```
+
+The install script registers the board ID, applies the Hiwonder EMM driver
+patches from `ardupilot/patches/` and copies the hwdef. The build scripts
+build the bootloader first if it is missing or was built for another ID.
+Rerunning either script is safe.
 
 The resulting firmware is:
 
