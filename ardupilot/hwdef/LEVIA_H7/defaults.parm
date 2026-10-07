@@ -3,3 +3,14 @@
 # CAN1 is wired to a transceiver on this board, enable DroneCAN on it
 CAN_P1_DRIVER 1
 CAN_D1_PROTOCOL 1
+
+# Heading from two F9P receivers (moving baseline).
+# GPS1 on SERIAL3 (USART2) is the base, GPS2 on SERIAL5 (UART4, U20) is the rover.
+# Wire the base UART2 TX to the rover UART2 RX for the RTCM3 corrections.
+GPS_TYPE 17
+GPS_TYPE2 18
+GPS_AUTO_CONFIG 1
+# Yaw from GPS, with compass fallback.
+EK3_SRC1_YAW 3
+# Set GPS_MB1_OFS_X/Y/Z to the base-to-rover antenna offset in metres once
+# the antennas are fixed to the vehicle, and check the sign on the bench.

@@ -16,7 +16,7 @@ define CH_CFG_ST_RESOLUTION 16
 
 # USB is the primary bring-up link. UART7 remains SERIAL1 and the dedicated
 # full-duplex RC connector on USART6 is exposed as SERIAL2 for CRSF/ELRS.
-SERIAL_ORDER OTG1 UART7 USART6 USART2 USART1
+SERIAL_ORDER OTG1 UART7 USART6 USART2 USART1 UART4
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 PA13 JTMS-SWDIO SWD
@@ -38,6 +38,16 @@ define DEFAULT_SERIAL3_PROTOCOL SerialProtocol_GPS
 PA9 USART1_TX USART1
 PA10 USART1_RX USART1
 define DEFAULT_SERIAL4_PROTOCOL SerialProtocol_Tramp
+
+# UART4 - second GPS (moving-baseline rover) on U20 pin 3 (MCU TX, to the
+# receiver RX) and pin 4 (MCU RX, from the receiver TX), SERIAL5. Appended to
+# SERIAL_ORDER so existing SERIAL numbering is unchanged. PB8/PB9 are the only
+# free UART4 pin pair on this design (PA0/PA1 motors, PD0/PD1 CAN, PC10/PC11
+# SDMMC1). U20 pin 1 is +9V, not 5V: power the receiver separately.
+# GPS2 is only enabled by GPS_TYPE2, which defaults.parm sets.
+PB8 UART4_RX UART4
+PB9 UART4_TX UART4
+define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_GPS
 
 # Define one genuine board ADC input so ChibiOS assigns the ADC DMA stream.
 PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
