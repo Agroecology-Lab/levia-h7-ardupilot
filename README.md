@@ -45,7 +45,8 @@ Clone ArduPilot separately, including its submodules, then run:
 
 The install script registers the board ID, applies the Hiwonder EMM driver
 patches from `ardupilot/patches/` and copies the hwdef. The build scripts
-build the bootloader first if it is missing or was built for another ID.
+build the bootloader first if it is missing, or if the board ID or
+`hwdef-bl.dat` changed since it was built.
 Rerunning either script is safe.
 
 The resulting firmware is:
@@ -53,6 +54,11 @@ The resulting firmware is:
 ```text
 /path/to/ardupilot/build/LEVIA_H7/bin/arducopter.apj
 ```
+
+## CI
+
+GitHub Actions lints the repo, tests the install script and builds
+bootloader, ArduCopter and ArduRover for LEVIA_H7. See `docs/CI.md`.
 
 ## First setup in QGroundControl
 

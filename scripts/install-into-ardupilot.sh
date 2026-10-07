@@ -57,19 +57,21 @@ else
     rm -f "$TMP"
 fi
 
-# Hiwonder EMM driver patches (idempotent)
-for patch in "$REPO_DIR"/ardupilot/patches/*.patch; do
-    if git -C "$ARDUPILOT_DIR" apply --check "$patch" 2>/dev/null; then
-        git -C "$ARDUPILOT_DIR" apply "$patch"
-        echo "applied $(basename "$patch")"
-    elif git -C "$ARDUPILOT_DIR" apply --check -R "$patch" 2>/dev/null; then
-        echo "already applied $(basename "$patch")"
-    else
-        echo "error: $(basename "$patch") neither applies nor is already applied." >&2
-        echo "       This ArduPilot revision has drifted from the one the patches target." >&2
-        exit 1
-    fi
-done
+# Hiwonder EMM driver patches (idempotent). SKIP_EMM_PATCHES=1 is for tests.
+if [ "${SKIP_EMM_PATCHES:-0}" != 1 ]; then
+    for patch in "$REPO_DIR"/ardupilot/patches/*.patch; do
+        if git -C "$ARDUPILOT_DIR" apply --check "$patch" 2>/dev/null; then
+            git -C "$ARDUPILOT_DIR" apply "$patch"
+            echo "applied $(basename "$patch")"
+        elif git -C "$ARDUPILOT_DIR" apply --check -R "$patch" 2>/dev/null; then
+            echo "already applied $(basename "$patch")"
+        else
+            echo "error: $(basename "$patch") neither applies nor is already applied." >&2
+            echo "       This ArduPilot revision has drifted from the one the patches target." >&2
+            exit 1
+        fi
+    done
+fi
 
 mkdir -p "$ARDUPILOT_DIR/libraries/AP_HAL_ChibiOS/hwdef/LEVIA_H7"
 mkdir -p "$ARDUPILOT_DIR/libraries/AP_HAL/examples/LEVIA_motor_pattern"
@@ -87,8 +89,5 @@ cp "$REPO_DIR/ardupilot/examples/LEVIA_bmi270_whoami/LEVIA_bmi270_whoami.cpp" \
    "$ARDUPILOT_DIR/libraries/AP_HAL/examples/LEVIA_bmi270_whoami/LEVIA_bmi270_whoami.cpp"
 cp "$REPO_DIR/ardupilot/examples/LEVIA_bmi270_whoami/wscript" \
    "$ARDUPILOT_DIR/libraries/AP_HAL/examples/LEVIA_bmi270_whoami/wscript"
-
-# the bootloader stamp is stale once the ID may have changed
-rm -f "$ARDUPILOT_DIR/Tools/bootloaders/LEVIA_H7_bl.boardid"
 
 echo "Installed LEVIA H7 support (board ID $BOARD_ID) into $ARDUPILOT_DIR"

@@ -6,6 +6,8 @@ The configuration was bench validated against ArduPilot commit:
 24b18174d645f85f9ed5b8ce5e0c343072bf6e6a
 ```
 
+The commit is also stored in `ardupilot/UPSTREAM_COMMIT`, which CI builds.
+
 ArduPilot evolves continuously. Re-run both diagnostics and the complete
 bring-up checklist after rebasing this board support onto a newer revision.
 

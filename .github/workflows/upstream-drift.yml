@@ -1,0 +1,65 @@
+name: upstream drift
+
+# Weekly full build against ArduPilot master. Catches patch conflicts, board ID
+# clashes and build breaks before they surprise a rebase.
+on:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: master build (${{ matrix.vehicle }})
+    runs-on: ubuntu-22.04
+    container: ardupilot/ardupilot-dev-chibios:v0.2.0
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        vehicle: [copter, rover]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: board
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ArduPilot/ardupilot
+          ref: master
+          path: ardupilot
+          submodules: recursive
+          persist-credentials: false
+      - name: install, build and verify
+        env:
+          VEHICLE: ${{ matrix.vehicle }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/ardupilot"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/board"
+          PATH="/usr/lib/ccache:/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          export PATH
+          board/scripts/ci/ci-build.sh "$GITHUB_WORKSPACE/ardupilot" "$VEHICLE" "$GITHUB_WORKSPACE/ci-out"
+
+  report:
+    name: open issue on drift
+    needs: build
+    if: failure()
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: open or update the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Build against ArduPilot master is failing"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          body="The weekly build against ArduPilot master failed: $RUN_URL"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

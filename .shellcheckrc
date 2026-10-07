@@ -1,0 +1,2 @@
+# "CDPATH= cd" is the standard way to clear CDPATH for one command
+disable=SC1007
