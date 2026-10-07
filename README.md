@@ -1,4 +1,6 @@
 # LEVIA H7 ArduPilot Support
+[![CI](https://img.shields.io/github/actions/workflow/status/samuk/levia-h7-ardupilot/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white&label=CI)](https://github.com/samuk/levia-h7-ardupilot/actions/workflows/ci.yml)
+[![Upstream drift](https://img.shields.io/github/actions/workflow/status/samuk/levia-h7-ardupilot/upstream-drift.yml?style=for-the-badge&logo=ardupilot&logoColor=white&label=ArduPilot%20master)](https://github.com/samuk/levia-h7-ardupilot/actions/workflows/upstream-drift.yml)
 
 Board support, diagnostics, and bring-up notes for the custom LEVIA H7 flight
 controller.
