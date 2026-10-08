@@ -9,6 +9,8 @@ The validated configuration uses an STM32H743 and two genuine Bosch BMI270
 IMUs on SPI1 and SPI4. It builds against an upstream ArduPilot checkout; this
 repository intentionally does not duplicate the full ArduPilot source tree.
 
+See also [Odrive Lua script](https://github.com/Agroecology-Lab/Sowbot_Data/blob/main/assets/odrive-ardupilot.zip) for running on top of this firmware.
+
 ## Repository layout
 
 - `ardupilot/hwdef/LEVIA_H7/`: ChibiOS board and bootloader definitions.
