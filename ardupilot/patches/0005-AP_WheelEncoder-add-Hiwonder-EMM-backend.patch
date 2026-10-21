@@ -1,0 +1,319 @@
+From c4c644740a3d660d0e43091c0a0b0ec1b9406609 Mon Sep 17 00:00:00 2001
+From: Sam <sam@bristolwireless.net>
+Date: Wed, 21 Oct 2026 20:03:26 +0100
+Subject: [PATCH 5/5] AP_WheelEncoder: add Hiwonder EMM backend
+
+Expose the EMM encoder totals as WENC_TYPE 11 so Rover feeds them to EKF3
+as wheel odometry (EK3_SRCn_VELXY 7). WENC instance 0 reads EMM encoder 1,
+instance 1 reads EMM encoder 2.
+
+AP_HiwonderEMM now reads the encoders every 50Hz tick instead of every 5th
+(ADC stays at 10Hz) and stamps each read. Rover sends a zero angle change
+between fresh samples, so the old 10Hz read would have looked like standstill
+to EKF3 for four of every five updates.
+
+The backend starts distance at zero on the first reading, because the EMM
+keeps its totals while powered.
+
+Known gap: if the EMM stops answering, Rover keeps sending zero angle
+changes with a growing time base. EKF3 then sees a stopped wheel. The pre-arm
+check only covers the start of a run.
+
+AI-assisted (Claude). SITL Rover build only (AP_HIWONDEREMM_ENABLED=1 via
+CXXFLAGS), not run, not tested on hardware.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01RyNKbZ8zczCSQUp1aaUSKQ
+---
+ libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp   | 41 ++++++++++---
+ libraries/AP_HiwonderEMM/AP_HiwonderEMM.h     |  8 ++-
+ libraries/AP_WheelEncoder/AP_WheelEncoder.cpp | 11 +++-
+ libraries/AP_WheelEncoder/AP_WheelEncoder.h   |  2 +
+ .../WheelEncoder_HiwonderEMM.cpp              | 57 +++++++++++++++++++
+ .../WheelEncoder_HiwonderEMM.h                | 46 +++++++++++++++
+ 6 files changed, 153 insertions(+), 12 deletions(-)
+ create mode 100644 libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.cpp
+ create mode 100644 libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.h
+
+diff --git a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
+index 42004df..790735e 100644
+--- a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
++++ b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
+@@ -40,7 +40,7 @@ extern const AP_HAL::HAL& hal;
+ 
+ #define EMM_I2C_CLOCK_HZ               400000
+ #define EMM_UPDATE_PERIOD_US           20000   // 50Hz speed commands
+-#define EMM_STATUS_EVERY_N_TICKS       5       // 10Hz ADC and encoder reads
++#define EMM_STATUS_EVERY_N_TICKS       5       // 10Hz ADC reads, encoders are read every tick
+ #define EMM_RETRY_TICKS                50      // 1s between probe attempts
+ #define EMM_TARGET_TIMEOUT_MS          200     // stop motors if update() stalls
+ #define EMM_LOG_PERIOD_MS              100
+@@ -216,6 +216,22 @@ void AP_HiwonderEMM::log_status()
+ #endif
+ }
+ 
++// get the latest cumulative encoder count for a motor (0 based) and the
++// time it was read. Returns false until the first successful read.
++bool AP_HiwonderEMM::get_encoder(uint8_t motor, int32_t &count, uint32_t &time_ms) const
++{
++    if (motor >= CHANNEL_COUNT) {
++        return false;
++    }
++    WITH_SEMAPHORE(sem);
++    if (!encoder_valid) {
++        return false;
++    }
++    count = encoder_count[motor];
++    time_ms = encoder_time_ms;
++    return true;
++}
++
+ // called from AP_Arming
+ bool AP_HiwonderEMM::pre_arm_check(char *failure_msg, const uint8_t failure_msg_len) const
+ {
+@@ -263,19 +279,26 @@ void AP_HiwonderEMM::timer()
+     }
+     set_motor_speed(speeds);
+ 
++    // encoder counts are read every tick (50Hz) so that AP_WheelEncoder
++    // can feed EKF3 with timely deltas. Rover sends zero change between
++    // fresh samples, so a slow read would look like standstill to the EKF.
++    int32_t counts[CHANNEL_COUNT];
++    const bool enc_ok = read_encoder_counts(counts);
++    const uint32_t enc_ms = AP_HAL::millis();
++    if (enc_ok) {
++        WITH_SEMAPHORE(sem);
++        memcpy(encoder_count, counts, sizeof(encoder_count));
++        encoder_time_ms = enc_ms;
++        encoder_valid = true;
++    }
++
+     if (++tick >= EMM_STATUS_EVERY_N_TICKS) {
+         tick = 0;
+         float volts;
+-        int32_t counts[CHANNEL_COUNT];
+-        const bool adc_ok = read_adc(volts);
+-        const bool enc_ok = read_encoder_counts(counts);
+-        WITH_SEMAPHORE(sem);
+-        if (adc_ok) {
++        if (read_adc(volts)) {
++            WITH_SEMAPHORE(sem);
+             battery_volts = volts;
+         }
+-        if (enc_ok) {
+-            memcpy(encoder_count, counts, sizeof(encoder_count));
+-        }
+     }
+ }
+ 
+diff --git a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
+index bce03f5..a9d1f80 100644
+--- a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
++++ b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
+@@ -55,6 +55,10 @@ public:
+ 
+     static constexpr uint8_t CHANNEL_COUNT = 4;
+ 
++    // get the latest cumulative encoder count for a motor (0 based) and
++    // the system time it was read. Returns false until the first read.
++    bool get_encoder(uint8_t motor, int32_t &count, uint32_t &time_ms) const;
++
+ private:
+     static AP_HiwonderEMM *_singleton;
+ 
+@@ -90,11 +94,13 @@ private:
+     uint16_t retry_ticks;
+ 
+     // values shared between threads, protected by sem
+-    HAL_Semaphore sem;
++    mutable HAL_Semaphore sem;
+     int8_t target_speed[CHANNEL_COUNT];
+     uint32_t last_target_ms;
+     float battery_volts;
+     int32_t encoder_count[CHANNEL_COUNT];
++    uint32_t encoder_time_ms = 0;
++    bool encoder_valid = false;
+ 
+     // events raised on the I2C thread, reported from update()
+     enum : uint8_t {
+diff --git a/libraries/AP_WheelEncoder/AP_WheelEncoder.cpp b/libraries/AP_WheelEncoder/AP_WheelEncoder.cpp
+index ad52bd4..5c06820 100644
+--- a/libraries/AP_WheelEncoder/AP_WheelEncoder.cpp
++++ b/libraries/AP_WheelEncoder/AP_WheelEncoder.cpp
+@@ -16,6 +16,7 @@
+ #include "AP_WheelEncoder.h"
+ #include "WheelEncoder_Quadrature.h"
+ #include "WheelEncoder_SITL_Quadrature.h"
++#include "WheelEncoder_HiwonderEMM.h"
+ #include <AP_Logger/AP_Logger.h>
+ 
+ extern const AP_HAL::HAL& hal;
+@@ -25,7 +26,7 @@ const AP_Param::GroupInfo AP_WheelEncoder::var_info[] = {
+     // @Param: _TYPE
+     // @DisplayName: WheelEncoder type
+     // @Description: What type of WheelEncoder is connected
+-    // @Values: 0:None,1:Quadrature,10:SITL Quadrature
++    // @Values: 0:None,1:Quadrature,10:SITL Quadrature,11:Hiwonder EMM
+     // @User: Standard
+     AP_GROUPINFO_FLAGS("_TYPE", 0, AP_WheelEncoder, _type[0], 0, AP_PARAM_FLAG_ENABLE),
+ 
+@@ -89,7 +90,7 @@ const AP_Param::GroupInfo AP_WheelEncoder::var_info[] = {
+     // @Param: 2_TYPE
+     // @DisplayName: Second WheelEncoder type
+     // @Description: What type of WheelEncoder sensor is connected
+-    // @Values: 0:None,1:Quadrature,10:SITL Quadrature
++    // @Values: 0:None,1:Quadrature,10:SITL Quadrature,11:Hiwonder EMM
+     // @User: Standard
+     AP_GROUPINFO("2_TYPE",   6, AP_WheelEncoder, _type[1], 0),
+ 
+@@ -182,6 +183,12 @@ void AP_WheelEncoder::init(void)
+ #endif
+             break;
+             
++        case WheelEncoder_TYPE_HIWONDER_EMM:
++#if AP_HIWONDEREMM_ENABLED
++            drivers[i] = NEW_NOTHROW AP_WheelEncoder_HiwonderEMM(*this, i, state[i]);
++#endif
++            break;
++
+         case WheelEncoder_TYPE_NONE:
+             break;
+         }
+diff --git a/libraries/AP_WheelEncoder/AP_WheelEncoder.h b/libraries/AP_WheelEncoder/AP_WheelEncoder.h
+index 4c92c91..8444f8d 100644
+--- a/libraries/AP_WheelEncoder/AP_WheelEncoder.h
++++ b/libraries/AP_WheelEncoder/AP_WheelEncoder.h
+@@ -31,6 +31,7 @@ public:
+     friend class AP_WheelEncoder_Backend;
+     friend class AP_WheelEncoder_Quadrature;
+     friend class AP_WheelEncoder_SITL_Quadrature;
++    friend class AP_WheelEncoder_HiwonderEMM;
+ 
+     AP_WheelEncoder(void);
+ 
+@@ -47,6 +48,7 @@ public:
+         WheelEncoder_TYPE_NONE             =   0,
+         WheelEncoder_TYPE_QUADRATURE       =   1,
+         WheelEncoder_TYPE_SITL_QUADRATURE  =  10,
++        WheelEncoder_TYPE_HIWONDER_EMM     =  11,
+     };
+ 
+     // The WheelEncoder_State structure is filled in by the backend driver
+diff --git a/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.cpp b/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.cpp
+new file mode 100644
+index 0000000..79d081b
+--- /dev/null
++++ b/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.cpp
+@@ -0,0 +1,57 @@
++/*
++   This program is free software: you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation, either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++
++#include "WheelEncoder_HiwonderEMM.h"
++
++#if AP_HIWONDEREMM_ENABLED
++
++#include <AP_HiwonderEMM/AP_HiwonderEMM.h>
++
++void AP_WheelEncoder_HiwonderEMM::update(void)
++{
++    auto *emm = AP::hiwonder_emm();
++    if (emm == nullptr) {
++        return;
++    }
++
++    int32_t count;
++    uint32_t time_ms;
++    if (!emm->get_encoder(_state.instance, count, time_ms)) {
++        return;
++    }
++
++    if (!have_zero) {
++        // the EMM keeps its totals while it is powered, so start from zero
++        // rather than reporting the board's history as a jump in distance
++        have_zero = true;
++        zero_count = count;
++        last_count = count;
++        last_time_ms = time_ms;
++        copy_state_to_frontend(0, 0, 0, time_ms);
++        return;
++    }
++
++    if (time_ms == last_time_ms) {
++        // no new reading since the last call
++        return;
++    }
++
++    total_ticks += abs(count - last_count);
++    last_count = count;
++    last_time_ms = time_ms;
++    copy_state_to_frontend(count - zero_count, total_ticks, 0, time_ms);
++}
++
++#endif  // AP_HIWONDEREMM_ENABLED
+diff --git a/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.h b/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.h
+new file mode 100644
+index 0000000..00cc46e
+--- /dev/null
++++ b/libraries/AP_WheelEncoder/WheelEncoder_HiwonderEMM.h
+@@ -0,0 +1,46 @@
++/*
++   This program is free software: you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation, either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++#pragma once
++
++#include <AP_HAL/AP_HAL_Boards.h>
++
++#if AP_HIWONDEREMM_ENABLED
++
++#include "WheelEncoder_Backend.h"
++
++/*
++  Wheel encoder backend reading the encoder totals of the Hiwonder 4-channel
++  encoder motor driver (AP_HiwonderEMM). WENC instance 0 reads EMM encoder 1,
++  instance 1 reads EMM encoder 2. Forward motion must count up, use
++  EMM_POL to fix the direction. Set WENC_CPR to the counts per wheel
++  revolution seen at the EMM, not the motor shaft.
++ */
++class AP_WheelEncoder_HiwonderEMM : public AP_WheelEncoder_Backend
++{
++public:
++    using AP_WheelEncoder_Backend::AP_WheelEncoder_Backend;
++
++    // update state
++    void update(void) override;
++
++private:
++    bool     have_zero;        // true once the first reading has been taken
++    int32_t  zero_count;       // EMM total at the first reading, so distance starts at zero
++    int32_t  last_count;       // EMM total at the previous reading
++    uint32_t last_time_ms;     // time of the previous reading
++    uint32_t total_ticks;      // sum of absolute count changes
++};
++
++#endif  // AP_HIWONDEREMM_ENABLED
+-- 
+2.43.0
+

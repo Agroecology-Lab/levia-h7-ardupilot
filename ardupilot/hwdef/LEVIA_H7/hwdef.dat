@@ -119,6 +119,16 @@ define OSD_ENABLED 1
 define HAL_OSD_TYPE_DEFAULT 1
 ROMFS_WILDCARD libraries/AP_OSD/fonts/font*.bin
 
+# SPI3 external connector U19: optical flow (PMW3901 class, AP "pixartflow"
+# device). Pins follow the Matek H743 SPI3 map, which the LEVIA PCB copies for
+# the motor timers; EXT_CS1 on PD4 is already held deselected in hwdef-bl.dat.
+# Verify PB3/PB4/PB5/PD4 against the LEVIA schematic before first power-up.
+PB3 SPI3_SCK SPI3
+PB4 SPI3_MISO SPI3
+PB5 SPI3_MOSI SPI3
+PD4 EXT_CS1 CS
+SPIDEV pixartflow SPI3 DEVID1 EXT_CS1 MODE3 2*MHZ 2*MHZ
+
 DMA_NOSHARE SPI1* SPI4*
 
 # Use ArduPilot's native BMI270 FIFO backend. IMU2 is physically rotated 90

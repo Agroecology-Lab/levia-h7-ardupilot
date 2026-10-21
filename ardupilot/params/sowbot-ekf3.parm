@@ -1,0 +1,40 @@
+# Sowbot Rover estimator setup: EKF3 is the only estimator.
+# Load after defaults.parm. Needs ardupilot/patches 0001-0005 and the
+# hwdef.dat SPI3 entry. Nothing here has run on hardware or SITL.
+
+# --- EKF3 sources -------------------------------------------------------------
+# One VELXY per source set. EK3_SRC_OPTIONS bit 0 fuses the velocity source of
+# every set, so SRC1 carries GPS, SRC2 the wheel encoders, SRC3 optical flow.
+# Keep SRC1 as the set you operate in; do not switch to SRC2/3 in flight.
+EK3_ENABLE 1
+AHRS_EKF_TYPE 3
+EK2_ENABLE 0
+EK3_SRC_OPTIONS 1
+EK3_SRC1_POSXY 3
+EK3_SRC1_VELXY 3
+EK3_SRC1_POSZ 1
+EK3_SRC1_VELZ 0
+EK3_SRC1_YAW 3
+EK3_SRC2_VELXY 7
+EK3_SRC3_VELXY 5
+
+# --- Wheel encoders (Hiwonder EMM, patch 0005) ---------------------------------
+# WENC = EMM encoder 1, WENC2 = EMM encoder 2. Use left track on 1, right on 2.
+# Forward must count up: flip EMM_POL if not.
+WENC_TYPE 11
+WENC2_TYPE 11
+# MEASURE and set: counts per wheel revolution, effective rolling radius (m),
+# and the track half-width. WENC_POS_Y is positive to the RIGHT of the body origin.
+#   WENC_CPR / WENC2_CPR
+#   WENC_RADIUS / WENC2_RADIUS
+#   WENC_POS_Y  = -half track width   (left)
+#   WENC2_POS_Y = +half track width   (right)
+# Tracks slip when turning. Start loose and tighten from logs.
+EK3_WENC_VERR 0.3
+
+# --- Optical flow (SPI3, PMW3901 / PMW3900 only) -------------------------------
+FLOW_TYPE 2
+EK3_FLOW_USE 1
+# MEASURE and set: sensor height above ground (m). Required on Rover.
+#   FLOW_HGT_OVR
+# Then calibrate FLOW_FXSCALER / FLOW_FYSCALER from a log and set EK3_FLOW_DELAY.
