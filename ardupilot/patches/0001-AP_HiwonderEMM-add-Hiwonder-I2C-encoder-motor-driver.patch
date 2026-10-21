@@ -1,0 +1,503 @@
+From 9251f6dae102a12198e0f45201d7bf3e111c8e89 Mon Sep 17 00:00:00 2001
+From: Sam <sam@bristolwireless.net>
+Date: Tue, 6 Oct 2026 22:23:24 +0000
+Subject: [PATCH 1/4] AP_HiwonderEMM: add Hiwonder I2C encoder motor driver
+
+AI-assisted (Claude). Ported from the PX4 hiwonder_emm driver. SITL Rover
+build only, not tested on hardware.
+---
+ libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp | 365 ++++++++++++++++++++
+ libraries/AP_HiwonderEMM/AP_HiwonderEMM.h   | 112 ++++++
+ 2 files changed, 477 insertions(+)
+ create mode 100644 libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
+ create mode 100644 libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
+
+diff --git a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
+new file mode 100644
+index 0000000..42004df
+--- /dev/null
++++ b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.cpp
+@@ -0,0 +1,365 @@
++/*
++   This program is free software: you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation, either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++/*
++  Driver for the Hiwonder 4-channel encoder motor driver over I2C.
++  Ported from the PX4 hiwonder_emm driver.
++ */
++
++#include "AP_HiwonderEMM.h"
++
++#if AP_HIWONDEREMM_ENABLED
++
++#include <AP_HAL/AP_HAL.h>
++#include <AP_Math/AP_Math.h>
++#include <AP_Logger/AP_Logger.h>
++#include <GCS_MAVLink/GCS.h>
++#include <SRV_Channel/SRV_Channel.h>
++
++extern const AP_HAL::HAL& hal;
++
++// register map
++#define EMM_REG_ADC_BAT                0   // battery voltage, uint16 mV
++#define EMM_REG_MOTOR_TYPE             20  // motor type
++#define EMM_REG_ENCODER_POLARITY       21  // encoder direction polarity
++#define EMM_REG_FIXED_SPEED            51  // closed loop speed, 4 x int8
++#define EMM_REG_ENCODER_TOTAL          60  // total pulses, 4 x int32
++
++// motor types: 0 no encoder, 1 TT, 2 N20, 3 JGB37-520 12V 110RPM
++
++#define EMM_I2C_CLOCK_HZ               400000
++#define EMM_UPDATE_PERIOD_US           20000   // 50Hz speed commands
++#define EMM_STATUS_EVERY_N_TICKS       5       // 10Hz ADC and encoder reads
++#define EMM_RETRY_TICKS                50      // 1s between probe attempts
++#define EMM_TARGET_TIMEOUT_MS          200     // stop motors if update() stalls
++#define EMM_LOG_PERIOD_MS              100
++
++AP_HiwonderEMM *AP_HiwonderEMM::_singleton;
++
++const AP_Param::GroupInfo AP_HiwonderEMM::var_info[] = {
++
++    // @Param: MASK
++    // @DisplayName: Hiwonder EMM servo channel mask
++    // @Description: Servo channels sent to the Hiwonder 4-channel encoder motor driver. The lowest set bit drives motor 1, up to a maximum of 4 channels. Selected channels no longer produce PWM, and their SERVOn_MIN, MAX and TRIM are forced to 1000, 2000 and 1500 (1500 is stopped).
++    // @Bitmask: 0:SERVO1,1:SERVO2,2:SERVO3,3:SERVO4,4:SERVO5,5:SERVO6,6:SERVO7,7:SERVO8,8:SERVO9,9:SERVO10,10:SERVO11,11:SERVO12,12:SERVO13,13:SERVO14,14:SERVO15,15:SERVO16
++    // @User: Standard
++    // @RebootRequired: True
++    AP_GROUPINFO_FLAGS("MASK", 1, AP_HiwonderEMM, motor_mask, 0, AP_PARAM_FLAG_ENABLE),
++
++    // @Param: BUS
++    // @DisplayName: Hiwonder EMM I2C bus
++    // @Description: I2C bus number the Hiwonder motor driver is connected to
++    // @Range: 0 3
++    // @User: Advanced
++    // @RebootRequired: True
++    AP_GROUPINFO("BUS", 2, AP_HiwonderEMM, bus, 1),
++
++    // @Param: ADDR
++    // @DisplayName: Hiwonder EMM I2C address
++    // @Description: I2C address of the Hiwonder motor driver, 52 (0x34) by default
++    // @Range: 1 127
++    // @User: Advanced
++    // @RebootRequired: True
++    AP_GROUPINFO("ADDR", 3, AP_HiwonderEMM, address, 0x34),
++
++    // @Param: TYPE
++    // @DisplayName: Hiwonder EMM motor type
++    // @Description: Motor type fitted to the driver
++    // @Values: 0:No encoder,1:TT,2:N20,3:JGB37-520 12V 110RPM
++    // @User: Standard
++    // @RebootRequired: True
++    AP_GROUPINFO("TYPE", 4, AP_HiwonderEMM, motor_type, 3),
++
++    // @Param: POL
++    // @DisplayName: Hiwonder EMM encoder polarity
++    // @Description: Encoder direction polarity. Set to 1 if encoder counts run backwards relative to motor drive.
++    // @Values: 0:Normal,1:Reversed
++    // @User: Advanced
++    // @RebootRequired: True
++    AP_GROUPINFO("POL", 5, AP_HiwonderEMM, encoder_polarity, 0),
++
++    AP_GROUPEND
++};
++
++AP_HiwonderEMM::AP_HiwonderEMM()
++{
++    AP_Param::setup_object_defaults(this, var_info);
++    if (_singleton != nullptr) {
++        AP_HAL::panic("AP_HiwonderEMM must be singleton");
++    }
++    _singleton = this;
++}
++
++// convert a servo PWM (1000 to 2000, 1500 stopped) to a signed speed
++int8_t AP_HiwonderEMM::pwm_to_speed(uint16_t pwm)
++{
++    const int16_t pwm_c = constrain_int16(pwm, 1000, 2000);
++    return int8_t(((pwm_c - 1500) * 127) / 500);
++}
++
++// allocate motors and register the I2C callback, called once from update()
++void AP_HiwonderEMM::init()
++{
++    init_done = true;
++
++    const uint32_t mask = uint32_t(motor_mask.get());
++    motor_count = __builtin_popcount(mask);
++    if (motor_count == 0 || motor_count > CHANNEL_COUNT) {
++        invalid_mask = true;
++        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EMM: SERVO_EMM_MASK needs 1 to %u channels", unsigned(CHANNEL_COUNT));
++        return;
++    }
++
++    uint8_t n = 0;
++    for (uint8_t chan = 0; chan < NUM_SERVO_CHANNELS && n < motor_count; chan++) {
++        if (mask & (1U << chan)) {
++            servo_chan[n++] = chan;
++        }
++    }
++
++    dev = hal.i2c_mgr->get_device_ptr(bus, address, EMM_I2C_CLOCK_HZ);
++    if (dev == nullptr) {
++        invalid_mask = true;
++        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EMM: no I2C bus %d", int(bus.get()));
++        return;
++    }
++
++    // take the channels off the PWM outputs, reversible so 1500 is stopped
++    SRV_Channels::set_digital_outputs(mask, mask);
++
++    dev->register_periodic_callback(EMM_UPDATE_PERIOD_US, FUNCTOR_BIND_MEMBER(&AP_HiwonderEMM::timer, void));
++}
++
++// called from SRV_Channels::push() on the main thread
++void AP_HiwonderEMM::update()
++{
++    if (motor_mask.get() == 0) {
++        return;
++    }
++    if (!init_done) {
++        init();
++    }
++    if (invalid_mask || dev == nullptr) {
++        return;
++    }
++
++    int8_t speeds[CHANNEL_COUNT] {};
++    for (uint8_t i = 0; i < motor_count; i++) {
++        uint16_t pwm;
++        if (SRV_Channels::get_output_pwm_chan(servo_chan[i], pwm)) {
++            speeds[i] = pwm_to_speed(pwm);
++        }
++    }
++
++    uint8_t events;
++    {
++        WITH_SEMAPHORE(sem);
++        memcpy(target_speed, speeds, sizeof(target_speed));
++        last_target_ms = AP_HAL::millis();
++        events = pending_events;
++        pending_events = 0;
++    }
++
++    // GCS messages are sent from here, not from the I2C thread
++    if (events & EVENT_FOUND) {
++        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EMM: found on bus %d addr 0x%02x", int(bus.get()), unsigned(address.get()));
++    }
++    if (events & EVENT_WRITE_FAILED) {
++        GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "EMM: motor speed write failed");
++    }
++    if (events & EVENT_WRITE_RECOVERED) {
++        GCS_SEND_TEXT(MAV_SEVERITY_INFO, "EMM: motor speed write recovered");
++    }
++
++    log_status();
++}
++
++// log battery voltage and encoder counts at 10Hz
++void AP_HiwonderEMM::log_status()
++{
++#if HAL_LOGGING_ENABLED
++    const uint32_t now_ms = AP_HAL::millis();
++    if (now_ms - last_log_ms < EMM_LOG_PERIOD_MS) {
++        return;
++    }
++    last_log_ms = now_ms;
++
++    float volts;
++    int32_t counts[CHANNEL_COUNT];
++    {
++        WITH_SEMAPHORE(sem);
++        volts = battery_volts;
++        memcpy(counts, encoder_count, sizeof(counts));
++    }
++
++    // @LoggerMessage: EMM
++    // @Description: Hiwonder encoder motor driver status
++    // @Field: TimeUS: Time since system startup
++    // @Field: V: Driver supply voltage
++    // @Field: E1: Motor 1 encoder count
++    // @Field: E2: Motor 2 encoder count
++    // @Field: E3: Motor 3 encoder count
++    // @Field: E4: Motor 4 encoder count
++    AP::logger().Write("EMM", "TimeUS,V,E1,E2,E3,E4", "sv----", "F0----", "Qfiiii",
++                       AP_HAL::micros64(), volts, counts[0], counts[1], counts[2], counts[3]);
++#endif
++}
++
++// called from AP_Arming
++bool AP_HiwonderEMM::pre_arm_check(char *failure_msg, const uint8_t failure_msg_len) const
++{
++    if (motor_mask.get() == 0) {
++        return true;
++    }
++    if (invalid_mask || dev == nullptr) {
++        hal.util->snprintf(failure_msg, failure_msg_len, "EMM not initialised");
++        return false;
++    }
++    if (!configured) {
++        hal.util->snprintf(failure_msg, failure_msg_len, "EMM not found on bus %d", int(bus.get()));
++        return false;
++    }
++    return true;
++}
++
++// I2C thread, 50Hz
++void AP_HiwonderEMM::timer()
++{
++    if (!configured) {
++        // retry slowly so an absent board does not hog the bus
++        if (retry_ticks > 0) {
++            retry_ticks--;
++            return;
++        }
++        retry_ticks = EMM_RETRY_TICKS;
++        if (!probe_and_configure()) {
++            return;
++        }
++        configured = true;
++        WITH_SEMAPHORE(sem);
++        pending_events |= EVENT_FOUND;
++    }
++
++    int8_t speeds[CHANNEL_COUNT];
++    {
++        WITH_SEMAPHORE(sem);
++        if (AP_HAL::millis() - last_target_ms > EMM_TARGET_TIMEOUT_MS) {
++            // main thread has stopped updating, do not leave motors running
++            memset(speeds, 0, sizeof(speeds));
++        } else {
++            memcpy(speeds, target_speed, sizeof(speeds));
++        }
++    }
++    set_motor_speed(speeds);
++
++    if (++tick >= EMM_STATUS_EVERY_N_TICKS) {
++        tick = 0;
++        float volts;
++        int32_t counts[CHANNEL_COUNT];
++        const bool adc_ok = read_adc(volts);
++        const bool enc_ok = read_encoder_counts(counts);
++        WITH_SEMAPHORE(sem);
++        if (adc_ok) {
++            battery_volts = volts;
++        }
++        if (enc_ok) {
++            memcpy(encoder_count, counts, sizeof(encoder_count));
++        }
++    }
++}
++
++// check the board answers, then set motor type and encoder polarity
++bool AP_HiwonderEMM::probe_and_configure()
++{
++    float volts;
++    if (!read_adc(volts)) {
++        return false;
++    }
++
++    const uint8_t set_type[2] { EMM_REG_MOTOR_TYPE, uint8_t(motor_type.get()) };
++    if (!dev->transfer(set_type, sizeof(set_type), nullptr, 0)) {
++        return false;
++    }
++
++    const uint8_t set_polarity[2] { EMM_REG_ENCODER_POLARITY, uint8_t(encoder_polarity.get()) };
++    if (!dev->transfer(set_polarity, sizeof(set_polarity), nullptr, 0)) {
++        return false;
++    }
++
++    WITH_SEMAPHORE(sem);
++    battery_volts = volts;
++    return true;
++}
++
++// read supply voltage, register holds little endian millivolts
++bool AP_HiwonderEMM::read_adc(float &volts)
++{
++    const uint8_t reg = EMM_REG_ADC_BAT;
++    uint8_t buf[2] {};
++    if (!dev->transfer(&reg, sizeof(reg), buf, sizeof(buf))) {
++        return false;
++    }
++    volts = (buf[0] | (buf[1] << 8)) * 0.001f;
++    return true;
++}
++
++// read total encoder pulses for all motors, little endian int32
++bool AP_HiwonderEMM::read_encoder_counts(int32_t counts[CHANNEL_COUNT])
++{
++    const uint8_t reg = EMM_REG_ENCODER_TOTAL;
++    uint8_t buf[CHANNEL_COUNT * 4] {};
++    if (!dev->transfer(&reg, sizeof(reg), buf, sizeof(buf))) {
++        return false;
++    }
++    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
++        counts[i] = int32_t(uint32_t(buf[i*4]) |
++                            (uint32_t(buf[i*4+1]) << 8) |
++                            (uint32_t(buf[i*4+2]) << 16) |
++                            (uint32_t(buf[i*4+3]) << 24));
++    }
++    return true;
++}
++
++// write speeds for all motors, closed loop, signed -127 to 127
++bool AP_HiwonderEMM::set_motor_speed(const int8_t speeds[CHANNEL_COUNT])
++{
++    uint8_t cmd[1 + CHANNEL_COUNT];
++    cmd[0] = EMM_REG_FIXED_SPEED;
++    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
++        cmd[i + 1] = uint8_t(speeds[i]);
++    }
++
++    const bool ok = dev->transfer(cmd, sizeof(cmd), nullptr, 0);
++    if (!ok && !set_speed_failed) {
++        set_speed_failed = true;
++        WITH_SEMAPHORE(sem);
++        pending_events |= EVENT_WRITE_FAILED;
++    } else if (ok && set_speed_failed) {
++        set_speed_failed = false;
++        WITH_SEMAPHORE(sem);
++        pending_events |= EVENT_WRITE_RECOVERED;
++    }
++    return ok;
++}
++
++namespace AP {
++
++AP_HiwonderEMM *hiwonder_emm()
++{
++    return AP_HiwonderEMM::get_singleton();
++}
++
++}
++
++#endif  // AP_HIWONDEREMM_ENABLED
+diff --git a/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
+new file mode 100644
+index 0000000..bce03f5
+--- /dev/null
++++ b/libraries/AP_HiwonderEMM/AP_HiwonderEMM.h
+@@ -0,0 +1,112 @@
++/*
++   This program is free software: you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation, either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++ */
++/*
++  Driver for the Hiwonder 4-channel encoder motor driver over I2C.
++
++  Product: https://www.hiwonder.com/products/4-channel-encoder-motor-driver
++
++  Ported from the PX4 hiwonder_emm driver. SERVO outputs selected by
++  SERVO_EMM_MASK are sent to the board as closed-loop speed commands.
++ */
++
++#pragma once
++
++#include <AP_HAL/AP_HAL_Boards.h>
++
++#ifndef AP_HIWONDEREMM_ENABLED
++#define AP_HIWONDEREMM_ENABLED 0
++#endif
++
++#if AP_HIWONDEREMM_ENABLED
++
++#include <AP_HAL/AP_HAL.h>
++#include <AP_HAL/I2CDevice.h>
++#include <AP_HAL/Semaphores.h>
++#include <AP_Param/AP_Param.h>
++
++class AP_HiwonderEMM {
++public:
++    AP_HiwonderEMM();
++
++    /* Do not allow copies */
++    CLASS_NO_COPY(AP_HiwonderEMM);
++
++    static AP_HiwonderEMM *get_singleton() { return _singleton; }
++
++    static const struct AP_Param::GroupInfo var_info[];
++
++    // called from SRV_Channels::push()
++    void update();
++
++    // called from AP_Arming, returns false if arming should be refused
++    bool pre_arm_check(char *failure_msg, const uint8_t failure_msg_len) const;
++
++    static constexpr uint8_t CHANNEL_COUNT = 4;
++
++private:
++    static AP_HiwonderEMM *_singleton;
++
++    // parameters
++    AP_Int32 motor_mask;
++    AP_Int8  bus;
++    AP_Int8  address;
++    AP_Int8  motor_type;
++    AP_Int8  encoder_polarity;
++
++    // main thread state
++    bool init_done;
++    bool invalid_mask;
++    uint8_t motor_count;
++    uint8_t servo_chan[CHANNEL_COUNT];
++    uint32_t last_log_ms;
++
++    void init();
++    static int8_t pwm_to_speed(uint16_t pwm);
++    void log_status();
++
++    // I2C thread state
++    AP_HAL::I2CDevice *dev;
++    void timer();
++    bool probe_and_configure();
++    bool read_adc(float &volts);
++    bool read_encoder_counts(int32_t counts[CHANNEL_COUNT]);
++    bool set_motor_speed(const int8_t speeds[CHANNEL_COUNT]);
++
++    bool configured;
++    bool set_speed_failed;
++    uint8_t tick;
++    uint16_t retry_ticks;
++
++    // values shared between threads, protected by sem
++    HAL_Semaphore sem;
++    int8_t target_speed[CHANNEL_COUNT];
++    uint32_t last_target_ms;
++    float battery_volts;
++    int32_t encoder_count[CHANNEL_COUNT];
++
++    // events raised on the I2C thread, reported from update()
++    enum : uint8_t {
++        EVENT_FOUND            = 1U << 0,
++        EVENT_WRITE_FAILED     = 1U << 1,
++        EVENT_WRITE_RECOVERED  = 1U << 2,
++    };
++    uint8_t pending_events;
++};
++
++namespace AP {
++    AP_HiwonderEMM *hiwonder_emm();
++};
++
++#endif  // AP_HIWONDEREMM_ENABLED

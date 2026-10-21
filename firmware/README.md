@@ -1,7 +1,8 @@
 # Validated firmware images
 
 This directory contains known-good firmware built for the provisional LEVIA H7
-ArduPilot board ID `1224`.
+ArduPilot board ID `1224`, which current ArduPilot master has since allocated to
+another board. Do not mix these images with a bootloader for a different ID.
 
 ## LEVIA_H7-24b18174
 

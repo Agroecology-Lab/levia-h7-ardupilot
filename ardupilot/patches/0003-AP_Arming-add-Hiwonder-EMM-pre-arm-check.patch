@@ -1,0 +1,71 @@
+From 63ad6e924467b67b55e8be20d31db514f57682e9 Mon Sep 17 00:00:00 2001
+From: Sam <sam@bristolwireless.net>
+Date: Tue, 6 Oct 2026 22:23:24 +0000
+Subject: [PATCH 3/4] AP_Arming: add Hiwonder EMM pre-arm check
+
+AI-assisted (Claude). Ported from the PX4 hiwonder_emm driver. SITL Rover
+build only, not tested on hardware.
+---
+ libraries/AP_Arming/AP_Arming.cpp | 21 +++++++++++++++++++++
+ libraries/AP_Arming/AP_Arming.h   |  2 ++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/libraries/AP_Arming/AP_Arming.cpp b/libraries/AP_Arming/AP_Arming.cpp
+index bdab310..5573e12 100644
+--- a/libraries/AP_Arming/AP_Arming.cpp
++++ b/libraries/AP_Arming/AP_Arming.cpp
+@@ -51,6 +51,7 @@
+ #include <RC_Channel/RC_Channel.h>
+ #include <AP_Button/AP_Button.h>
+ #include <AP_FETtecOneWire/AP_FETtecOneWire.h>
++#include <AP_HiwonderEMM/AP_HiwonderEMM.h>
+ #include <AP_RPM/AP_RPM.h>
+ #include <AP_Mount/AP_Mount.h>
+ #include <AP_OpenDroneID/AP_OpenDroneID.h>
+@@ -1484,6 +1485,23 @@ bool AP_Arming::fettec_checks(bool display_failure) const
+ }
+ #endif  // AP_FETTEC_ONEWIRE_ENABLED
+ 
++#if AP_HIWONDEREMM_ENABLED
++bool AP_Arming::hiwonder_emm_checks(bool display_failure) const
++{
++    const AP_HiwonderEMM *emm = AP::hiwonder_emm();
++    if (emm == nullptr) {
++        return true;
++    }
++
++    char fail_msg[MAVLINK_MSG_STATUSTEXT_FIELD_TEXT_LEN+1];
++    if (!emm->pre_arm_check(fail_msg, ARRAY_SIZE(fail_msg))) {
++        check_failed(display_failure, "EMM: %s", fail_msg);
++        return false;
++    }
++    return true;
++}
++#endif  // AP_HIWONDEREMM_ENABLED
++
+ #if AP_ARMING_AUX_AUTH_ENABLED
+ // request an auxiliary authorisation id.  This id should be used in subsequent calls to set_aux_auth_passed/failed
+ // returns true on success
+@@ -1758,6 +1776,9 @@ bool AP_Arming::pre_arm_checks(bool report)
+ #if AP_FETTEC_ONEWIRE_ENABLED
+         &  fettec_checks(report)
+ #endif
++#if AP_HIWONDEREMM_ENABLED
++        &  hiwonder_emm_checks(report)
++#endif
+ #if HAL_VISUALODOM_ENABLED
+         &  visodom_checks(report)
+ #endif
+diff --git a/libraries/AP_Arming/AP_Arming.h b/libraries/AP_Arming/AP_Arming.h
+index d42a4f9..2f14674 100644
+--- a/libraries/AP_Arming/AP_Arming.h
++++ b/libraries/AP_Arming/AP_Arming.h
+@@ -269,6 +269,8 @@ protected:
+ 
+     bool fettec_checks(bool display_failure) const;
+ 
++    bool hiwonder_emm_checks(bool display_failure) const;
++
+ #if HAL_PROXIMITY_ENABLED
+     virtual bool proximity_checks(bool report) const;
+ #endif

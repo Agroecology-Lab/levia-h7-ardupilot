@@ -16,7 +16,7 @@ define CH_CFG_ST_RESOLUTION 16
 
 # USB is the primary bring-up link. UART7 remains SERIAL1 and the dedicated
 # full-duplex RC connector on USART6 is exposed as SERIAL2 for CRSF/ELRS.
-SERIAL_ORDER OTG1 UART7 USART6 USART2 USART1
+SERIAL_ORDER OTG1 UART7 USART6 USART2 USART1 UART4
 PA11 OTG_FS_DM OTG1
 PA12 OTG_FS_DP OTG1
 PA13 JTMS-SWDIO SWD
@@ -38,6 +38,16 @@ define DEFAULT_SERIAL3_PROTOCOL SerialProtocol_GPS
 PA9 USART1_TX USART1
 PA10 USART1_RX USART1
 define DEFAULT_SERIAL4_PROTOCOL SerialProtocol_Tramp
+
+# UART4 - second GPS (moving-baseline rover) on U20 pin 3 (MCU TX, to the
+# receiver RX) and pin 4 (MCU RX, from the receiver TX), SERIAL5. Appended to
+# SERIAL_ORDER so existing SERIAL numbering is unchanged. PB8/PB9 are the only
+# free UART4 pin pair on this design (PA0/PA1 motors, PD0/PD1 CAN, PC10/PC11
+# SDMMC1). U20 pin 1 is +9V, not 5V: power the receiver separately.
+# GPS2 is only enabled by GPS_TYPE2, which defaults.parm sets.
+PB8 UART4_RX UART4
+PB9 UART4_TX UART4
+define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_GPS
 
 # Define one genuine board ADC input so ChibiOS assigns the ADC DMA stream.
 PC0 BATT_VOLTAGE_SENS ADC1 SCALE(1)
@@ -127,6 +137,14 @@ COMPASS IST8310 I2C:0:0x0E false ROTATION_ROLL_180
 define HAL_I2C_INTERNAL_MASK 1
 define AP_COMPASS_PROBING_ENABLED 1
 
+# CAN1 (U13) through the U12 transceiver (1051-class). Pins from the
+# LEVIA-H7 schematic/PCB: PD0 -> CAN1.RX, PD1 -> CAN1.TX, PD3 -> CAN1.SILENT
+# (transceiver pin 8, S). Drive S low for normal mode. Close JP1 to add the
+# onboard 120R termination.
+PD0 CAN1_RX CAN1
+PD1 CAN1_TX CAN1
+PD3 GPIO_CAN1_SILENT OUTPUT PUSHPULL SPEED_LOW LOW GPIO(70)
+
 # Switched 9V VTX rail. Relay 1 keeps it off by default and allows controlled
 # enable only after an antenna is fitted to the transmitter.
 PE5 VTX_9V_EN OUTPUT LOW GPIO(81)
@@ -143,3 +161,6 @@ define HAL_STORAGE_SIZE 32768
 STORAGE_FLASH_PAGE 14
 
 env BUILD_ABIN True
+
+# Hiwonder I2C encoder motor driver (needs ardupilot/patches applied)
+define AP_HIWONDEREMM_ENABLED 1

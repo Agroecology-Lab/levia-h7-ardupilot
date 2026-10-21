@@ -1,0 +1,135 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: static checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: shellcheck scripts/*.sh scripts/ci/*.sh
+      - name: actionlint
+        run: |
+          pip install --user actionlint-py==1.7.12.25
+          "$HOME/.local/bin/actionlint"
+      - name: repository checks
+        run: python3 scripts/ci/check_repo.py
+      - name: install script tests
+        run: sh scripts/ci/test-install.sh
+
+  # Builds the validated ArduPilot commit (ardupilot/UPSTREAM_COMMIT) in
+  # ArduPilot's own ChibiOS container, the same one its CI uses.
+  build:
+    name: build (${{ matrix.vehicle }})
+    needs: static
+    runs-on: ubuntu-22.04
+    container: ardupilot/ardupilot-dev-chibios:v0.2.0
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        vehicle: [copter, rover]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: board
+          persist-credentials: false
+      - name: read pinned ArduPilot commit
+        id: pin
+        run: echo "sha=$(tr -d '[:space:]' < board/ardupilot/UPSTREAM_COMMIT)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        with:
+          repository: ArduPilot/ardupilot
+          ref: ${{ steps.pin.outputs.sha }}
+          path: ardupilot
+          submodules: recursive
+          persist-credentials: false
+      - name: restore ccache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.vehicle }}-${{ steps.pin.outputs.sha }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.vehicle }}-${{ steps.pin.outputs.sha }}-
+            ccache-${{ matrix.vehicle }}-
+      - name: configure ccache
+        run: |
+          mkdir -p ~/.ccache
+          {
+            echo "base_dir = $GITHUB_WORKSPACE"
+            echo "compression = true"
+            echo "max_size = 600M"
+            echo "sloppiness = file_stat_matches,include_file_ctime,include_file_mtime,time_macros"
+          } > ~/.ccache/ccache.conf
+          ccache -z
+      - name: install, build and verify
+        env:
+          VEHICLE: ${{ matrix.vehicle }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/ardupilot"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/board"
+          PATH="/usr/lib/ccache:/opt/gcc-arm-none-eabi-10/bin:/github/home/.local/bin:$PATH"
+          export PATH
+          board/scripts/ci/ci-build.sh "$GITHUB_WORKSPACE/ardupilot" "$VEHICLE" "$GITHUB_WORKSPACE/ci-out"
+          ccache -s
+      - name: summary
+        if: always()
+        run: |
+          if [ -f ci-out/build-info.txt ]; then
+            {
+              echo '```'
+              cat ci-out/build-info.txt
+              cat ci-out/SHA256SUMS
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: save ccache
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.vehicle }}-${{ steps.pin.outputs.sha }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: LEVIA_H7-${{ matrix.vehicle }}-${{ github.sha }}
+          path: ci-out/
+          retention-days: 14
+          if-no-files-found: error
+
+  # Cheap early warning: do the patches and the board ID still fit upstream
+  # master? Informational only. The weekly upstream-drift workflow does the
+  # full build.
+  upstream-compat:
+    name: upstream master compatibility
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: board
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ArduPilot/ardupilot
+          ref: master
+          path: ardupilot
+          persist-credentials: false
+      - name: install against upstream master
+        run: board/scripts/install-into-ardupilot.sh ardupilot
