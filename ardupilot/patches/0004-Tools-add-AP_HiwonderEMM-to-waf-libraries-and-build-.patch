@@ -1,0 +1,50 @@
+From 06a3b16c441c84fad1cd8197f1f5f5d3d7c9a6d7 Mon Sep 17 00:00:00 2001
+From: Sam <sam@bristolwireless.net>
+Date: Tue, 6 Oct 2026 22:23:25 +0000
+Subject: [PATCH 4/4] Tools: add AP_HiwonderEMM to waf libraries and build
+ options
+
+AI-assisted (Claude). Ported from the PX4 hiwonder_emm driver. SITL Rover
+build only, not tested on hardware.
+---
+ Tools/ardupilotwaf/ardupilotwaf.py | 1 +
+ Tools/scripts/build_options.py     | 1 +
+ Tools/scripts/extract_features.py  | 1 +
+ 3 files changed, 3 insertions(+)
+
+diff --git a/Tools/ardupilotwaf/ardupilotwaf.py b/Tools/ardupilotwaf/ardupilotwaf.py
+index d8c7329..ab8666a 100644
+--- a/Tools/ardupilotwaf/ardupilotwaf.py
++++ b/Tools/ardupilotwaf/ardupilotwaf.py
+@@ -118,6 +118,7 @@ COMMON_VEHICLE_DEPENDENT_LIBRARIES = [
+     'AP_ExternalAHRS',
+     'AP_VideoTX',
+     'AP_FETtecOneWire',
++    'AP_HiwonderEMM',
+     'AP_TemperatureSensor',
+     'AP_Torqeedo',
+     'AP_CustomRotations',
+diff --git a/Tools/scripts/build_options.py b/Tools/scripts/build_options.py
+index 9e9a5c3..7ca7f36 100644
+--- a/Tools/scripts/build_options.py
++++ b/Tools/scripts/build_options.py
+@@ -505,6 +505,7 @@ BUILD_OPTIONS = [
+     Feature('Actuators', 'RobotisServo', 'AP_ROBOTISSERVO_ENABLED', 'Enable RobotisServo protocol', 0, None),
+     Feature('Actuators', 'SBUS Output', 'AP_SBUSOUTPUT_ENABLED', 'Enable SBUS output on serial ports', 0, None),
+     Feature('Actuators', 'FETTecOneWire', 'AP_FETTEC_ONEWIRE_ENABLED', 'Enable FETTec OneWire ESCs', 0, None),
++    Feature('Actuators', 'HiwonderEMM', 'AP_HIWONDEREMM_ENABLED', 'Enable Hiwonder I2C encoder motor driver', 0, None),
+     Feature('Actuators', 'KDECAN', 'AP_KDECAN_ENABLED', 'KDE Direct KDECAN ESC', 0, None),
+     Feature('Actuators', 'HimarkServo', 'AP_DRONECAN_HIMARK_SERVO_SUPPORT', 'Enable Himark DroneCAN servos', 0, "DroneCAN"),
+     Feature('Actuators', 'HobbywingESC', 'AP_DRONECAN_HOBBYWING_ESC_SUPPORT', 'Enable Hobbywing DroneCAN ESCs', 0, "DroneCAN,ESC_TELEM"),  # noqa: E501
+diff --git a/Tools/scripts/extract_features.py b/Tools/scripts/extract_features.py
+index 2955871..32265ff 100755
+--- a/Tools/scripts/extract_features.py
++++ b/Tools/scripts/extract_features.py
+@@ -203,6 +203,7 @@ class ExtractFeatures(BuildScriptBase):
+             ('AP_DRONECAN_VOLZ_FEEDBACK_ENABLED', r'AP_DroneCAN::handle_actuator_status_Volz\b',),
+             ('AP_ROBOTISSERVO_ENABLED', r'AP_RobotisServo::init\b',),
+             ('AP_FETTEC_ONEWIRE_ENABLED', r'AP_FETtecOneWire::init\b',),
++            ('AP_HIWONDEREMM_ENABLED', r'AP_HiwonderEMM::init\b',),
+             ('AP_SBUSOUTPUT_ENABLED', 'AP_SBusOut::sbus_format_frame',),
+             ('AP_KDECAN_ENABLED', r'AP_KDECAN::update\b',),
+ 

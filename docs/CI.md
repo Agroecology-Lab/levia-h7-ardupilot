@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `ci` / `static checks` | every push to `main`, every PR | shellcheck, actionlint, `scripts/ci/check_repo.py`, `scripts/ci/test-install.sh` |
 | `ci` / `build (copter)`, `build (rover)` | after static checks pass | installs into the pinned ArduPilot commit, builds bootloader and firmware, verifies the image |
-| `ci` / `upstream master compatibility` | every push and PR | installs into current ArduPilot master (board ID free). Informational, does not block |
+| `ci` / `upstream master compatibility` | every push and PR | installs into current ArduPilot master (patches apply, ID free). Informational, does not block |
 | `upstream drift` | Mondays 05:17 UTC, manual | full copter and rover build against ArduPilot master. Opens or updates an issue on failure |
 
 Builds use `ardupilot/ardupilot-dev-chibios`, the container ArduPilot's own CI
@@ -16,8 +16,10 @@ uses, with its arm-none-eabi GCC 10. The pinned commit is read from
 
 ## What a build verifies
 
+- the install script is idempotent (a second run applies nothing)
 - the `.apj` board ID equals `ardupilot/BOARD_ID`
 - at least 128 KB of flash is free (`MIN_FREE_KB` overrides)
+- `AP_HiwonderEMM` is linked into the image
 - every line of `defaults.parm` and `params/<vehicle>.parm` reached the image
 
 Artifacts (`.apj`, `.bin`, the bootloader, `SHA256SUMS`, `build-info.txt`) are
@@ -26,8 +28,8 @@ not publish releases.
 
 ## What CI does not prove
 
-
-Nothing here runs the firmware. There is no SITL test and no hardware test.
+Nothing here runs the firmware. There is no SITL test of the EMM driver and no
+hardware test, and compile success says nothing about the I2C register map.
 
 
 ## Suggested branch protection

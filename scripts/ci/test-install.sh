@@ -1,12 +1,14 @@
 #!/bin/sh
 # Tests install-into-ardupilot.sh against a fake ArduPilot tree. No network and
-# no real checkout, so it runs in seconds.
+# no real checkout, so it runs in seconds. The patch step is skipped; the
+# integration job exercises it against real ArduPilot.
 set -eu
 
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO=$(CDPATH= cd -- "$HERE/../.." && pwd)
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+export SKIP_EMM_PATCHES=1
 
 fails=0
 fail() { echo "FAIL: $*" >&2; fails=$((fails + 1)); }

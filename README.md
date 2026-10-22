@@ -47,11 +47,12 @@ Clone ArduPilot separately, including its submodules, then run:
 ./scripts/build-copter.sh /path/to/ardupilot   # or build-rover.sh
 ```
 
-The install script registers the board ID and copies the hwdef. The build
-scripts embed the vehicle defaults from `ardupilot/params/` (`copter.parm`,
-`rover.parm`) and build the bootloader first if it is missing, or if the board
-ID or `hwdef-bl.dat` changed since it was built. Rerunning either script is
-safe.
+The install script registers the board ID, applies the Hiwonder EMM driver
+patches from `ardupilot/patches/` and copies the hwdef. The build scripts
+embed the vehicle defaults from `ardupilot/params/` (`copter.parm`,
+`rover.parm`) and build the bootloader first if it is missing, or if the
+board ID or `hwdef-bl.dat` changed since it was built. Rerunning either
+script is safe.
 
 The resulting firmware is:
 

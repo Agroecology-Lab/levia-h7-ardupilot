@@ -1,0 +1,64 @@
+From a740db0ff1967dbe6c8eb1ec4a89210a120d4169 Mon Sep 17 00:00:00 2001
+From: Sam <sam@bristolwireless.net>
+Date: Tue, 6 Oct 2026 22:23:24 +0000
+Subject: [PATCH 2/4] SRV_Channel: add AP_HiwonderEMM output backend
+
+AI-assisted (Claude). Ported from the PX4 hiwonder_emm driver. SITL Rover
+build only, not tested on hardware.
+---
+ libraries/SRV_Channel/SRV_Channel.h    |  6 ++++++
+ libraries/SRV_Channel/SRV_Channels.cpp | 10 ++++++++++
+ 2 files changed, 16 insertions(+)
+
+diff --git a/libraries/SRV_Channel/SRV_Channel.h b/libraries/SRV_Channel/SRV_Channel.h
+index e721ba5..86b8a3c 100644
+--- a/libraries/SRV_Channel/SRV_Channel.h
++++ b/libraries/SRV_Channel/SRV_Channel.h
+@@ -19,6 +19,7 @@
+ #include <AP_Common/Bitmask.h>
+ #include <AP_Volz_Protocol/AP_Volz_Protocol.h>
+ #include <AP_RobotisServo/AP_RobotisServo.h>
++#include <AP_HiwonderEMM/AP_HiwonderEMM.h>
+ #include <AP_SBusOut/AP_SBusOut.h>
+ #include <AP_BLHeli/AP_BLHeli.h>
+ #include <AP_FETtecOneWire/AP_FETtecOneWire.h>
+@@ -669,6 +670,11 @@ private:
+     AP_FETtecOneWire fetteconwire;
+ #endif  // AP_FETTEC_ONEWIRE_ENABLED
+ 
++#if AP_HIWONDEREMM_ENABLED
++    // support for Hiwonder I2C encoder motor driver
++    AP_HiwonderEMM hiwonder_emm;
++#endif
++
+     // mask of disabled channels
+     static uint32_t disabled_mask;
+ 
+diff --git a/libraries/SRV_Channel/SRV_Channels.cpp b/libraries/SRV_Channel/SRV_Channels.cpp
+index 1dba7bc..6916867 100644
+--- a/libraries/SRV_Channel/SRV_Channels.cpp
++++ b/libraries/SRV_Channel/SRV_Channels.cpp
+@@ -199,6 +199,12 @@ const AP_Param::GroupInfo SRV_Channels::var_info[] = {
+     AP_SUBGROUPINFO(fetteconwire, "_FTW_",  25, SRV_Channels, AP_FETtecOneWire),
+ #endif
+ 
++#if AP_HIWONDEREMM_ENABLED
++    // @Group: _EMM_
++    // @Path: ../AP_HiwonderEMM/AP_HiwonderEMM.cpp
++    AP_SUBGROUPINFO(hiwonder_emm, "_EMM_",  45, SRV_Channels, AP_HiwonderEMM),
++#endif
++
+     // @Param: _DSHOT_RATE
+     // @DisplayName: Servo DShot output rate
+     // @Description: DShot output rate for all outputs as a multiple of the loop rate. 0 sets the output rate to be fixed at 1Khz for low loop rates. This value should never be set below 500Hz.
+@@ -511,6 +517,10 @@ void SRV_Channels::push()
+     fetteconwire.update();
+ #endif
+ 
++#if AP_HIWONDEREMM_ENABLED
++    hiwonder_emm.update();
++#endif
++
+ #if AP_KDECAN_ENABLED
+     if (AP::kdecan() != nullptr) {
+         AP::kdecan()->update();
