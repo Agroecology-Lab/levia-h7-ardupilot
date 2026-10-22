@@ -11,7 +11,8 @@ REPO_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 sh "$REPO_DIR/scripts/ensure-bootloader.sh" "$ARDUPILOT_DIR"
 
 cd "$ARDUPILOT_DIR"
-./waf configure --board LEVIA_H7
+./waf configure --board LEVIA_H7 \
+    --default-parameters "$REPO_DIR/ardupilot/params/rover.parm"
 ./waf rover
 
 echo "Firmware: $ARDUPILOT_DIR/build/LEVIA_H7/bin/ardurover.apj"

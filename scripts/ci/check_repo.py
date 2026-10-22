@@ -71,6 +71,9 @@ for name in ("hwdef.dat", "hwdef-bl.dat"):
         err(f"{name}: APJ_BOARD_ID must be AP_HW_LEVIA_H7")
 if not (ROOT / "ardupilot/hwdef/LEVIA_H7/defaults.parm").exists():
     err("ardupilot/hwdef/LEVIA_H7/defaults.parm missing (install script copies it)")
+for vehicle in ("copter", "rover"):
+    if not (ROOT / f"ardupilot/params/{vehicle}.parm").exists():
+        err(f"ardupilot/params/{vehicle}.parm missing (build-{vehicle}.sh embeds it)")
 
 # validated firmware images must match the checksums in firmware/README.md
 readme = read("firmware/README.md")
