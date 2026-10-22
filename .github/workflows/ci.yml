@@ -61,7 +61,7 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: restore ccache
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ~/.ccache
           key: ccache-${{ matrix.vehicle }}-${{ steps.pin.outputs.sha }}-${{ github.run_id }}
@@ -101,7 +101,7 @@ jobs:
           fi
       - name: save ccache
         if: always() && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ~/.ccache
           key: ccache-${{ matrix.vehicle }}-${{ steps.pin.outputs.sha }}-${{ github.run_id }}
