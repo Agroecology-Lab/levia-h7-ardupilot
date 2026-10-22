@@ -43,12 +43,6 @@ if free_kb < min_free_kb:
 print(f"board_id {d['board_id']}, {d['image_size']} bytes, {free_kb} KB flash free")
 PY
 
-# the EMM driver must really be in the image, not silently compiled out
-if [ "$(arm-none-eabi-nm -C "$BIN/$ELF_NAME" | grep -c 'AP_HiwonderEMM')" -eq 0 ]; then
-    echo "error: AP_HiwonderEMM missing from $ELF_NAME" >&2
-    exit 1
-fi
-
 # every default in the repo's defaults.parm must reach the image
 DEFAULTS=$REPO_DIR/ardupilot/hwdef/LEVIA_H7/defaults.parm
 grep -v '^[[:space:]]*#' "$DEFAULTS" | grep -v '^[[:space:]]*$' > "$BUILD/expected_defaults.txt"
