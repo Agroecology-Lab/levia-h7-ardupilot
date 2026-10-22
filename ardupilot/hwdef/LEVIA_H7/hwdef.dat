@@ -44,7 +44,7 @@ define DEFAULT_SERIAL4_PROTOCOL SerialProtocol_Tramp
 # SERIAL_ORDER so existing SERIAL numbering is unchanged. PB8/PB9 are the only
 # free UART4 pin pair on this design (PA0/PA1 motors, PD0/PD1 CAN, PC10/PC11
 # SDMMC1). U20 pin 1 is +9V, not 5V: power the receiver separately.
-# GPS2 is only enabled by GPS_TYPE2, which defaults.parm sets.
+# GPS2 is only enabled by GPS_TYPE2, which ardupilot/params/rover.parm sets.
 PB8 UART4_RX UART4
 PB9 UART4_TX UART4
 define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_GPS
@@ -161,6 +161,3 @@ define HAL_STORAGE_SIZE 32768
 STORAGE_FLASH_PAGE 14
 
 env BUILD_ABIN True
-
-# Hiwonder I2C encoder motor driver (needs ardupilot/patches applied)
-define AP_HIWONDEREMM_ENABLED 1

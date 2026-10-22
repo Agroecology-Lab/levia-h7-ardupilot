@@ -177,7 +177,7 @@ Set:
 AHRS_ORIENTATION = Yaw270
 ```
 
-Reboot after changing it. Then perform a full accelerometer calibration with this final orientation selected. Do not compensate for a board-orientation problem by changing the individual IMU rotations: the two per-sensor rotations were independently validated against each other.
+The ArduCopter build defaults to this; stored values override it. Reboot after changing it. Then perform a full accelerometer calibration with this final orientation selected. Do not compensate for a board-orientation problem by changing the individual IMU rotations: the two per-sensor rotations were independently validated against each other.
 
 Expected motion checks:
 

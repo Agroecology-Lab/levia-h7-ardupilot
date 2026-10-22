@@ -60,14 +60,7 @@ for _, path in tracked():
         if b"\r\n" in (ROOT / path).read_bytes():
             err(f"{path}: CRLF line endings")
 
-# vendored patches: numbered, contiguous, real diffs, no stale board patch
-patch_dir = ROOT / "ardupilot" / "patches"
-patches = sorted(patch_dir.glob("*.patch"))
-for i, patch in enumerate(patches, start=1):
-    if not re.fullmatch(rf"{i:04d}-.+\.patch", patch.name):
-        err(f"{patch.name}: expected sequence number {i:04d}")
-    if "diff --git" not in patch.read_text():
-        err(f"{patch.name}: contains no diff")
+# no stale board patch
 if (ROOT / "ardupilot" / "board_types.patch").exists():
     err("ardupilot/board_types.patch must not exist, install script inserts the ID")
 
@@ -76,12 +69,11 @@ for name in ("hwdef.dat", "hwdef-bl.dat"):
     text = read(f"ardupilot/hwdef/LEVIA_H7/{name}")
     if not re.search(r"^APJ_BOARD_ID\s+AP_HW_LEVIA_H7\s*$", text, re.M):
         err(f"{name}: APJ_BOARD_ID must be AP_HW_LEVIA_H7")
-if any("HiwonderEMM" in p.name for p in patches):
-    if not re.search(r"^define AP_HIWONDEREMM_ENABLED 1\s*$",
-                     read("ardupilot/hwdef/LEVIA_H7/hwdef.dat"), re.M):
-        err("hwdef.dat: AP_HIWONDEREMM_ENABLED not defined but driver patches exist")
 if not (ROOT / "ardupilot/hwdef/LEVIA_H7/defaults.parm").exists():
     err("ardupilot/hwdef/LEVIA_H7/defaults.parm missing (install script copies it)")
+for vehicle in ("copter", "rover"):
+    if not (ROOT / f"ardupilot/params/{vehicle}.parm").exists():
+        err(f"ardupilot/params/{vehicle}.parm missing (build-{vehicle}.sh embeds it)")
 
 # validated firmware images must match the checksums in firmware/README.md
 readme = read("firmware/README.md")

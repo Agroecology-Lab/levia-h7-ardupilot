@@ -1,0 +1,10 @@
+# ArduCopter defaults for LEVIA_H7 (quadcopter, single GPS on SERIAL3).
+# Embedded by scripts/build-copter.sh. Stored parameters override these.
+
+# Board mounting orientation, see docs/LEVIA_H7_BMI270_BUILD_GUIDE.md section 6.
+# Reboot and redo the accelerometer calibration if you change it.
+AHRS_ORIENTATION 6
+
+# DShot300, as validated with the MicoAir AM32-4IN1-55A ESC.
+# Set to the protocol your ESC supports (0 = normal PWM).
+MOT_PWM_TYPE 5

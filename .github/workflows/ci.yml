@@ -112,9 +112,9 @@ jobs:
           retention-days: 14
           if-no-files-found: error
 
-  # Cheap early warning: do the patches and the board ID still fit upstream
-  # master? Informational only. The weekly upstream-drift workflow does the
-  # full build.
+  # Cheap early warning: does the board ID still fit upstream master?
+  # Informational only. The weekly upstream-drift workflow does the full
+  # build.
   upstream-compat:
     name: upstream master compatibility
     runs-on: ubuntu-24.04

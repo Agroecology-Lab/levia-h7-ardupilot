@@ -27,9 +27,3 @@ The bootloader embeds the ID. The prebuilt images in `bootloader/` and
 with the current `ardupilot/BOARD_ID` needs its own bootloader, installed
 through ST-Link: a bootloader with a different ID cannot upload the
 application through the normal USB uploader.
-
-## Hiwonder EMM driver
-
-`ardupilot/patches/` holds four patches (new library, SRV_Channels hook,
-arming check, build lists). They apply cleanly to `24b18174` and to master at
-`e08bc39`. See `HIWONDER_EMM.md`.

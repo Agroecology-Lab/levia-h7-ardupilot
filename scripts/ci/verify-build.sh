@@ -43,19 +43,18 @@ if free_kb < min_free_kb:
 print(f"board_id {d['board_id']}, {d['image_size']} bytes, {free_kb} KB flash free")
 PY
 
-# the EMM driver must really be in the image, not silently compiled out
-if [ "$(arm-none-eabi-nm -C "$BIN/$ELF_NAME" | grep -c 'AP_HiwonderEMM')" -eq 0 ]; then
-    echo "error: AP_HiwonderEMM missing from $ELF_NAME" >&2
-    exit 1
-fi
-
-# every default in the repo's defaults.parm must reach the image
+# every default in defaults.parm and params/<vehicle>.parm must reach the image
 DEFAULTS=$REPO_DIR/ardupilot/hwdef/LEVIA_H7/defaults.parm
-grep -v '^[[:space:]]*#' "$DEFAULTS" | grep -v '^[[:space:]]*$' > "$BUILD/expected_defaults.txt"
+VEHICLE_DEFAULTS=$REPO_DIR/ardupilot/params/$VEHICLE.parm
+cat "$DEFAULTS" "$VEHICLE_DEFAULTS" | grep -v '^[[:space:]]*#' | grep -v '^[[:space:]]*$' > "$BUILD/expected_defaults.txt"
 want=$(wc -l < "$BUILD/expected_defaults.txt")
 have=$(grep -cFxf "$BUILD/expected_defaults.txt" "$BUILD/processed_defaults.parm" || true)
 if [ "$want" -ne "$have" ]; then
-    echo "error: $have of $want defaults.parm lines reached the image" >&2
+    echo "error: $have of $want default parameter lines reached the image" >&2
+    echo "missing:" >&2
+    grep -vFxf "$BUILD/processed_defaults.parm" "$BUILD/expected_defaults.txt" >&2 || true
+    echo "processed_defaults.parm:" >&2
+    cat "$BUILD/processed_defaults.parm" >&2
     exit 1
 fi
 
