@@ -39,12 +39,14 @@ PA9 USART1_TX USART1
 PA10 USART1_RX USART1
 define DEFAULT_SERIAL4_PROTOCOL SerialProtocol_Tramp
 
-# UART4 - second GPS (moving-baseline rover) on U20 pin 3 (MCU TX, to the
-# receiver RX) and pin 4 (MCU RX, from the receiver TX), SERIAL5. Appended to
-# SERIAL_ORDER so existing SERIAL numbering is unchanged. PB8/PB9 are the only
-# free UART4 pin pair on this design (PA0/PA1 motors, PD0/PD1 CAN, PC10/PC11
-# SDMMC1). U20 pin 1 is +9V, not 5V: power the receiver separately.
-# GPS2 is only enabled by GPS_TYPE2, which ardupilot/params/rover.parm sets.
+# UART4 on U20 pin 3 (MCU TX, to the peer RX) and pin 4 (MCU RX, from the peer
+# TX), SERIAL5. Appended to SERIAL_ORDER so existing SERIAL numbering is
+# unchanged. PB8/PB9 are the only free UART4 pin pair on this design (PA0/PA1
+# motors, PD0/PD1 CAN, PC10/PC11 SDMMC1). U20 pin 1 is +9V, not 5V: power the
+# peer separately.
+# The board default is a GPS port. ardupilot/params/rover.parm overrides it to
+# MAVLink2 for the Sowbot SBC link, and moves both F9P receivers to SERIAL2
+# (U8) and SERIAL3 (U24).
 PB8 UART4_RX UART4
 PB9 UART4_TX UART4
 define DEFAULT_SERIAL5_PROTOCOL SerialProtocol_GPS

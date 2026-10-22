@@ -1,8 +1,23 @@
 # ArduRover defaults for LEVIA_H7. Embedded by scripts/build-rover.sh.
+# Matches src/devkit_mavlink_bridge/mavlink.md in Agroecology-Lab/Sowbot.
 
-# Heading from two F9P receivers (moving baseline).
-# GPS1 on SERIAL3 (USART2) is the base, GPS2 on SERIAL5 (UART4, U20) is the rover.
-# Wire the base UART2 TX to the rover UART2 RX for the RTCM3 corrections.
+# --- Serial ports ---------------------------------------------------------------
+# Not the board defaults: the hwdef puts RC on SERIAL2 and a second GPS on SERIAL5.
+# ArduPilot gives GPS1 to the lowest-numbered port set to GPS, so the base F9P must
+# stay on SERIAL2 and the rover F9P on SERIAL3. Swapping them breaks the moving baseline.
+#   SERIAL2 = USART6, U8   F9P #1 (base, GPS1)
+#   SERIAL3 = USART2, U24  F9P #2 (rover, GPS2)
+#   SERIAL5 = UART4,  U20  Avaota SBC, MAVLink2 (devkit_mavlink_bridge)
+# U8 no longer carries an RC receiver on this vehicle.
+SERIAL2_PROTOCOL 5
+SERIAL3_PROTOCOL 5
+SERIAL5_PROTOCOL 2
+# 115 is 115200 baud. Must match MAVLINK_BAUD on the SBC (bridge default 115200).
+SERIAL5_BAUD 115
+
+# --- GNSS and heading -----------------------------------------------------------
+# Heading from two F9P receivers (moving baseline). ArduPilot routes the RTCM3 from the
+# base to the rover itself, so there is no UART2 wire between the receivers.
 GPS_TYPE 17
 GPS_TYPE2 18
 GPS_AUTO_CONFIG 1
@@ -10,3 +25,22 @@ GPS_AUTO_CONFIG 1
 EK3_SRC1_YAW 3
 # Set GPS_MB1_OFS_X/Y/Z to the base-to-rover antenna offset in metres once
 # the antennas are fixed to the vehicle, and check the sign on the bench.
+
+# --- Failsafes ------------------------------------------------------------------
+# Both stop the rover in place (Hold, FS_ACTION 2), not RTL.
+# SBC or bridge dead: the bridge sends a ground-station HEARTBEAT every 1 s, so the GCS
+# failsafe fires FS_GCS_TIMEOUT seconds after it stops. 2 s is the lowest value allowed.
+FS_ACTION 2
+FS_GCS_ENABLE 1
+FS_GCS_TIMEOUT 2
+# EKF unhealthy or GNSS lost: variance failsafe, threshold left at the default 0.8.
+FS_EKF_ACTION 1
+# Fence breach: Hold, not the default RTL or Hold. FENCE_ENABLE is left off here: the
+# boundary is site specific, so load it and enable the fence when commissioning.
+FENCE_ACTION 2
+#
+# Guided-mode stop. mavlink.md lists GUID_TIMEOUT ~1 s as a second layer behind the bridge's
+# own zero-on-stale. Rover has no GUID_TIMEOUT at the pinned ArduPilot commit
+# (ardupilot/UPSTREAM_COMMIT): it stops a guided target after a fixed 3 s, about 4.8 m at
+# 1.6 m/s. Only ArduPilot master has the parameter. Until the pin moves, the bridge's
+# cmd_vel_timeout_s (0.5 s) is the only fast stop.
