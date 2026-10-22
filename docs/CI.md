@@ -18,7 +18,7 @@ uses, with its arm-none-eabi GCC 10. The pinned commit is read from
 
 - the `.apj` board ID equals `ardupilot/BOARD_ID`
 - at least 128 KB of flash is free (`MIN_FREE_KB` overrides)
-- every line of `defaults.parm` reached the image
+- every line of `defaults.parm` and `params/<vehicle>.parm` reached the image
 
 Artifacts (`.apj`, `.bin`, the bootloader, `SHA256SUMS`, `build-info.txt`) are
 kept for 14 days. They carry a provisional, unregistered board ID, so CI does

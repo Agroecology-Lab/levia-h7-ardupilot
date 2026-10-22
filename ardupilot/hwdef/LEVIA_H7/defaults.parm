@@ -1,6 +1,6 @@
 # LEVIA_H7 board defaults (applied by ArduPilot at first boot, all vehicles).
-# Vehicle-specific defaults live in ardupilot/params/ and are embedded by
-# scripts/build-copter.sh and scripts/build-rover.sh.
+# Vehicle-specific defaults live in ardupilot/params/. scripts/build-copter.sh
+# and scripts/build-rover.sh append them to the installed copy of this file.
 
 # CAN1 is wired to a transceiver on this board, enable DroneCAN on it
 CAN_P1_DRIVER 1
